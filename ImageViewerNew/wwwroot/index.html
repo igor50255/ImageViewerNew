@@ -1,11 +1,531 @@
-<!DOCTYPE html>
-<html lang="en">
+﻿<!DOCTYPE html>
+<html lang="ru">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Hello!</title>
+    <meta charset="UTF-8">
+
+    <link rel="icon" type="image/png" sizes="128x128" href="icon/image_12899.png">
+
+    <title>Image Viewer</title>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #viewer {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+        }
+
+        .viewer-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: 0 0;
+            cursor: grab;
+            will-change: transform, opacity;
+            transition: opacity 0.3s ease;
+            pointer-events: auto;
+        }
+
+            .viewer-image.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+
+        #counter {
+            position: fixed;
+            top: 20px;
+            left: 14px;
+            color: rgba(255,255,255,0.8);
+            font: 18px Arial;
+            background: rgba(0,0,0,0.4);
+            padding: 4px 8px;
+            border-radius: 4px;
+            z-index: 10;
+        }
+
+        .nav {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            width: 15%;
+            z-index: 5;
+            cursor: pointer;
+        }
+
+        #prev {
+            left: 0;
+        }
+
+        #next {
+            right: 0;
+        }
+
+        #toggleFit {
+            position: fixed;
+            top: 20px;
+            right: 14px;
+            color: rgba(255,255,255,0.8);
+            font: 18px Arial;
+            background: rgba(0,0,0,0.4);
+            padding: 4px 8px;
+            border-radius: 4px;
+            z-index: 10;
+            cursor: pointer;
+            border: none;
+            outline: none;
+            min-width: 60px;
+            text-align: center;
+        }
+
+            #toggleFit:hover {
+                background: rgba(0,0,0,0.6);
+            }
+
+        /* === GALLERY === */
+        .gallery {
+            position: fixed;
+            inset: 0;
+            background: #fff;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, 150px);
+            gap: 12px;
+            justify-content: center;
+            align-content: start;
+            padding: 12px;
+            overflow-y: auto;
+            z-index: 20;
+            transition: grid-template-columns 0.15s ease;
+        }
+
+            .gallery.hidden {
+                display: none;
+            }
+
+            /* ===== Карточка превью ===== */
+            .gallery canvas {
+                width: 150px;
+                height: 150px;
+                display: block;
+                border-radius: 12px;
+                border: 2px solid #fff; /*не активный цвет */
+                background: #fff;
+                transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+                cursor: pointer;
+            }
+
+                /* ===== Hover эффект - здесь меняется цвет рамки при наведении мыши ===== */
+                .gallery canvas:hover {
+                    border-color: #00CED1; /* активный цвет */
+                    box-shadow: 0 6px 16px rgba(0, 206, 209, 0.25);
+                    transform: translateY(-2px);
+                }
+
+                /* ===== Активный клик (опционально) ===== */
+                .gallery canvas:active {
+                    transform: translateY(0);
+                    box-shadow: 0 3px 8px rgba(79, 140, 255, 0.3);
+                }
+
+                /* ===== Клавиатурный фокус (если добавишь tabindex) ===== */
+                .gallery canvas:focus-visible {
+                    outline: none;
+                    border-color: #4f8cff;
+                    box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.25);
+                }
+    </style>
 </head>
 <body>
-	<h1>Всем привет!</h1>
+
+    <div id="viewer">
+        <img id="image1" class="viewer-image" draggable="false">
+        <img id="image2" class="viewer-image hidden" draggable="false">
+    </div>
+
+    <div id="prev" class="nav"></div>
+    <div id="next" class="nav"></div>
+    <div id="counter"></div>
+    <button id="toggleFit">Fit</button>
+
+    <div id="gallery" class="gallery hidden"></div>
+
+    <script src="images.js"></script>
+
+    <script src="switch.js"></script>
+    <script src="gallery.js"></script>
+
+    <script>
+        let index = 0;
+        /* стартовый индекс из внешней переменной, если задан */
+        if (typeof window.startIndex === 'number' &&
+            window.startIndex >= 0 &&
+            window.startIndex < images.length) {
+            index = window.startIndex;
+        }
+
+        const img1 = document.getElementById('image1');
+        const img2 = document.getElementById('image2');
+        const counter = document.getElementById('counter');
+        const toggleFitBtn = document.getElementById('toggleFit');
+        const viewer = document.getElementById('viewer');
+
+        /* состояние */
+        let scale = 1;
+        let offsetX = 0;
+        let offsetY = 0;
+        let fitMode = true; // true = Fit, false = 1:1
+        let currentImage = img1;
+        let isSwitching = false;
+
+        /* drag */
+        let dragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+
+        /* === ОСНОВНЫЕ ФУНКЦИИ === */
+
+        function applyTransform(imgElement) {
+            if (imgElement) {
+                imgElement.style.transform =
+                    `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+            }
+        }
+
+        function applyTransformToBoth() {
+            applyTransform(img1);
+            applyTransform(img2);
+        }
+
+        /* Fit: масштабируем под окно */
+        function fitToScreen(imgElement = currentImage) {
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const iw = imgElement.naturalWidth;
+            const ih = imgElement.naturalHeight;
+
+            if (iw === 0 || ih === 0) return;
+
+            scale = Math.min(vw / iw, vh / ih);
+            offsetX = (vw - iw * scale) / 2;
+            offsetY = (vh - ih * scale) / 2;
+
+            applyTransform(imgElement);
+        }
+
+        /* 1:1: натуральный размер если меньше окна, иначе подгонка под окно */
+        function scaleToOne(imgElement = currentImage) {
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const iw = imgElement.naturalWidth;
+            const ih = imgElement.naturalHeight;
+
+            if (iw === 0 || ih === 0) return;
+
+            const fitsInWindow = iw <= vw && ih <= vh;
+
+            if (fitsInWindow) {
+                scale = 1;
+                offsetX = (vw - iw) / 2;
+                offsetY = (vh - ih) / 2;
+            } else {
+                scale = Math.min(vw / iw, vh / ih);
+                offsetX = (vw - iw * scale) / 2;
+                offsetY = (vh - ih * scale) / 2;
+            }
+
+            applyTransform(imgElement);
+        }
+
+        /* переключение режима */
+        function toggleFitMode() {
+            fitMode = !fitMode;
+            toggleFitBtn.textContent = fitMode ? 'Fit' : '1:1';
+
+            if (fitMode) {
+                fitToScreen();
+            } else {
+                scaleToOne();
+            }
+        }
+
+        /* зум относительно курсора */
+        function zoomAt(cx, cy, factor) {
+            const prevScale = scale;
+            const newScale = Math.min(Math.max(scale * factor, 0.1), 10);
+
+            const ix = (cx - offsetX) / prevScale;
+            const iy = (cy - offsetY) / prevScale;
+
+            scale = newScale;
+            offsetX = cx - ix * scale;
+            offsetY = cy - iy * scale;
+
+            applyTransformToBoth();
+        }
+
+        /* === СОБЫТИЯ === */
+
+        // Обработчик колесика мыши
+        document.addEventListener('wheel', e => {
+            if (!document.getElementById('gallery').classList.contains('hidden')) return;// если не включена галерея, зумим
+
+            e.preventDefault();
+            zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.1 : 0.9);
+        }, { passive: false });
+
+        // Drag & Drop
+        const CLICK_THRESHOLD = 5;
+        let mouseDownX = 0;
+        let mouseDownY = 0;
+        let isDragging = false;
+        let moved = false;
+
+        function setupDragEvents(imgElement) {
+            imgElement.addEventListener('mousedown', e => {
+                if (imgElement.classList.contains('hidden')) return;
+
+                mouseDownX = e.clientX;
+                mouseDownY = e.clientY;
+
+                dragStartX = e.clientX - offsetX;
+                dragStartY = e.clientY - offsetY;
+
+                isDragging = true;
+                moved = false;
+
+                imgElement.style.cursor = 'grabbing';
+            });
+        }
+
+        // Настраиваем события для обоих изображений
+        setupDragEvents(img1);
+        setupDragEvents(img2);
+
+        document.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+
+            const dx = e.clientX - mouseDownX;
+            const dy = e.clientY - mouseDownY;
+
+            // drag начинается только после порога
+            if (!moved) {
+                if (Math.abs(dx) < CLICK_THRESHOLD && Math.abs(dy) < CLICK_THRESHOLD) {
+                    return;
+                }
+                moved = true;
+            }
+
+            offsetX = e.clientX - dragStartX;
+            offsetY = e.clientY - dragStartY;
+            applyTransformToBoth();
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+
+            isDragging = false;
+            img1.style.cursor = 'grab';
+            img2.style.cursor = 'grab';
+
+            // одиночный клик
+            if (!moved) {
+                resetView();
+            }
+        });
+
+        // Сбрасывает вид (масштабирование и перемещение)
+        function resetView() {
+            if (fitMode) {
+                fitToScreen();
+                // Синхронизируем трансформацию для второго изображения
+                if (currentImage === img1) {
+                    applyTransform(img2);
+                } else {
+                    applyTransform(img1);
+                }
+            } else {
+                scaleToOne();
+                // Синхронизируем трансформацию для второго изображения
+                if (currentImage === img1) {
+                    applyTransform(img2);
+                } else {
+                    applyTransform(img1);
+                }
+            }
+        }
+
+        // Двойной клик разворачивает окно на весь экран
+        viewer.addEventListener('dblclick', toggleFullscreen);
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            setTimeout(() => {
+                if (fitMode) {
+                    fitToScreen();
+                } else {
+                    scaleToOne();
+                }
+            }, 100);
+        });
+
+        // Перелистывание картинок
+        function nextImage() {
+            if (isSwitching) return;
+            index = (index + 1) % images.length;
+            show();
+        }
+
+        function prevImage() {
+            if (isSwitching) return;
+            index = (index - 1 + images.length) % images.length;
+            show();
+        }
+
+        // Навигация кликами
+        document.getElementById('next').onclick = nextImage;
+        document.getElementById('prev').onclick = prevImage;
+
+        // Навигация клавиатурой
+        document.addEventListener('keydown', e => {
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                e.preventDefault();
+            }
+
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                nextImage();
+            }
+
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                prevImage();
+            }
+        });
+
+        /* === ОСНОВНАЯ ЛОГИКА ПОКАЗА ИЗОБРАЖЕНИЙ === */
+
+        function show() {
+            if (isSwitching) return;
+            isSwitching = true;
+
+            // Определяем какое изображение сейчас активно, какое будет следующим
+            const activeImage = currentImage;
+            const nextImage = currentImage === img1 ? img2 : img1;
+
+            // Обновляем счетчик и заголовок сразу
+            counter.textContent = `${index + 1} / ${images.length}`;
+            document.title = images[index].Name;
+
+            // Начинаем загрузку в неактивное изображение
+            nextImage.onload = () => {
+                // Применяем текущие трансформации к новому изображению
+                nextImage.style.transform = activeImage.style.transform;
+
+                // Переключаем видимость
+                activeImage.classList.add('hidden');
+                nextImage.classList.remove('hidden');
+
+                // Обновляем текущее изображение
+                currentImage = nextImage;
+
+                // При необходимости корректируем масштаб под новый режим
+                if (fitMode) {
+                    fitToScreen(currentImage);
+                } else {
+                    scaleToOne(currentImage);
+                }
+
+                isSwitching = false;
+
+                // Предзагружаем соседние изображения
+                preloadNeighbors();
+            };
+
+            nextImage.onerror = () => {
+                console.error('Failed to load image:', images[index].Path);
+                isSwitching = false;
+            };
+
+            // Начинаем загрузку
+            nextImage.src = images[index].Path;
+        }
+
+        // Функция предзагрузки соседних изображений
+        let preloadedImages = {};
+
+        function preloadImage(imgIndex) {
+            if (!preloadedImages[imgIndex] && images[imgIndex]) {
+                const img = new Image();
+                img.src = images[imgIndex].Path;
+                preloadedImages[imgIndex] = img;
+            }
+        }
+
+        function preloadNeighbors() {
+            const prevIndex = (index - 1 + images.length) % images.length;
+            const nextIndex = (index + 1) % images.length;
+
+            preloadImage(prevIndex);
+            preloadImage(nextIndex);
+        }
+
+        // Обработчик клика по фону для сброса вида
+        viewer.addEventListener('click', e => {
+            if (e.target === viewer) {
+                resetView();
+            }
+        });
+
+        // Кнопка переключения режима
+        toggleFitBtn.onclick = toggleFitMode;
+
+        // Обработчик изменения размера окна
+        window.addEventListener('resize', () => {
+            if (fitMode) {
+                fitToScreen();
+            } else {
+                scaleToOne();
+            }
+        });
+
+        /* === ИНИЦИАЛИЗАЦИЯ === */
+
+        // Загружаем первое изображение
+        function init() {
+            counter.textContent = `${index + 1} / ${images.length}`;
+            document.title = images[index].Name;
+
+            img1.onload = () => {
+                if (fitMode) {
+                    fitToScreen(img1);
+                } else {
+                    scaleToOne(img1);
+                }
+
+                // Предзагружаем следующее изображение
+                preloadNeighbors();
+            };
+
+            img1.src = images[index].Path;
+            currentImage = img1;
+        }
+
+        // Запускаем инициализацию
+        init();
+    </script>
+
 </body>
 </html>

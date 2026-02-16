@@ -41,7 +41,7 @@ namespace ImageViewerNew.CreateStart
                 .Select(f => new ImageInfo
                 {
                     Name = Path.GetFileName(f),
-                    Path = Path.Combine($"https://{host}", Path.GetFileName(f))
+                    Path = $"https://{host}/{Uri.EscapeDataString(Path.GetFileName(f))}"
                 })
                 .ToList();
             // ----------- end ---------------
@@ -53,7 +53,7 @@ namespace ImageViewerNew.CreateStart
             ";\n\n" +
                 $"window.startIndex = {startIndex};\n\n" +
                 $"window.sourcePath = {JsonSerializer.Serialize(sourcePath)};\n\n" +
-                $"window.urlServer = {JsonSerializer.Serialize("http://localhost:21235")};";
+                $"window.urlServer = {JsonSerializer.Serialize("http://localhost:5000")};";
 
             File.WriteAllText(jsPath, jsContent);
             // ----------- end ---------------

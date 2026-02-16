@@ -1,5 +1,6 @@
 ﻿<!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
 
@@ -8,7 +9,8 @@
     <title>Image Viewer</title>
 
     <style>
-        html, body {
+        html,
+        body {
             margin: 0;
             padding: 0;
             width: 100%;
@@ -35,18 +37,18 @@
             pointer-events: auto;
         }
 
-            .viewer-image.hidden {
-                opacity: 0;
-                pointer-events: none;
-            }
+        .viewer-image.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
 
         #counter {
             position: fixed;
             top: 20px;
             left: 14px;
-            color: rgba(255,255,255,0.8);
+            color: rgba(255, 255, 255, 0.8);
             font: 18px Arial;
-            background: rgba(0,0,0,0.4);
+            background: rgba(0, 0, 0, 0.4);
             padding: 4px 8px;
             border-radius: 4px;
             z-index: 10;
@@ -73,9 +75,9 @@
             position: fixed;
             top: 20px;
             right: 14px;
-            color: rgba(255,255,255,0.8);
+            color: rgba(255, 255, 255, 0.8);
             font: 18px Arial;
-            background: rgba(0,0,0,0.4);
+            background: rgba(0, 0, 0, 0.4);
             padding: 4px 8px;
             border-radius: 4px;
             z-index: 10;
@@ -86,9 +88,9 @@
             text-align: center;
         }
 
-            #toggleFit:hover {
-                background: rgba(0,0,0,0.6);
-            }
+        #toggleFit:hover {
+            background: rgba(0, 0, 0, 0.6);
+        }
 
         /* === GALLERY === */
         .gallery {
@@ -106,43 +108,47 @@
             transition: grid-template-columns 0.15s ease;
         }
 
-            .gallery.hidden {
-                display: none;
-            }
+        .gallery.hidden {
+            display: none;
+        }
 
-            /* ===== Карточка превью ===== */
-            .gallery canvas {
-                width: 150px;
-                height: 150px;
-                display: block;
-                border-radius: 12px;
-                border: 2px solid #fff; /*не активный цвет */
-                background: #fff;
-                transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
-                cursor: pointer;
-            }
+        /* ===== Карточка превью ===== */
+        .gallery canvas {
+            width: 150px;
+            height: 150px;
+            display: block;
+            border-radius: 12px;
+            border: 2px solid #fff;
+            /*не активный цвет */
+            background: #fff;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+            cursor: pointer;
+        }
 
-                /* ===== Hover эффект - здесь меняется цвет рамки при наведении мыши ===== */
-                .gallery canvas:hover {
-                    border-color: #00CED1; /* активный цвет */
-                    box-shadow: 0 6px 16px rgba(0, 206, 209, 0.25);
-                    transform: translateY(-2px);
-                }
+        /* ===== Hover эффект - здесь меняется цвет рамки при наведении мыши ===== */
+        .gallery canvas:hover {
+            border-color: #00CED1;
+            /* активный цвет */
+            box-shadow: 0 6px 16px rgba(0, 206, 209, 0.25);
+            transform: translateY(-2px);
+        }
 
-                /* ===== Активный клик (опционально) ===== */
-                .gallery canvas:active {
-                    transform: translateY(0);
-                    box-shadow: 0 3px 8px rgba(79, 140, 255, 0.3);
-                }
+        /* ===== Активный клик (опционально) ===== */
+        .gallery canvas:active {
+            transform: translateY(0);
+            box-shadow: 0 3px 8px rgba(79, 140, 255, 0.3);
+        }
 
-                /* ===== Клавиатурный фокус (если добавишь tabindex) ===== */
-                .gallery canvas:focus-visible {
-                    outline: none;
-                    border-color: #4f8cff;
-                    box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.25);
-                }
+        /* ===== Клавиатурный фокус (если добавишь tabindex) ===== */
+        .gallery canvas:focus-visible {
+            outline: none;
+            border-color: #4f8cff;
+            box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.25);
+        }
+
     </style>
 </head>
+
 <body>
 
     <div id="viewer">
@@ -363,15 +369,19 @@
         }
 
         // Двойной клик разворачивает окно на весь экран
-        viewer.addEventListener('dblclick', toggleFullscreen);
-
-        function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
+        viewer.addEventListener('dblclick', () => {
+            // WPF fullscreen (без шапки/кнопок)
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage({ type: "toggle-window-fullscreen" });
             } else {
-                document.exitFullscreen();
+                // fallback на случай запуска в обычном браузере
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                } else {
+                    document.exitFullscreen();
+                }
             }
-        }
+        });
 
         document.addEventListener('fullscreenchange', () => {
             setTimeout(() => {
@@ -381,6 +391,15 @@
                     scaleToOne();
                 }
             }, 100);
+        });
+
+        // Выход из полноэкранного режима через Esc
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({ type: "exit-window-fullscreen" });
+                }
+            }
         });
 
         // Перелистывание картинок
@@ -528,4 +547,5 @@
     </script>
 
 </body>
+
 </html>

@@ -52,12 +52,17 @@ async function fetchFileList(path) {
 /**
  * Загружает один файл как Blob
  */
-async function fetchImageBlob(path, name) {
-    return fetch(
-        window.urlServer + "/api/file?path=" +
-        encodeURIComponent(path) +
-        "&name=" + encodeURIComponent(name)
-    ).then(r => r.blob());
+// async function fetchImageBlob(path, name) {
+//     return fetch(
+//         window.urlServer + "/api/file?path=" +
+//         encodeURIComponent(path) +
+//         "&name=" + encodeURIComponent(name)
+//     ).then(r => r.blob());
+// }
+async function fetchImageBlobByUrl(url, signal) {
+    const resp = await fetch(url, { signal });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+    return await resp.blob();
 }
 
 /* =========================
@@ -192,13 +197,12 @@ async function load() {
     const signal = controller.signal;
     currentLoadController = controller;
 
-    //const path = "C:\\Users\\igorNik\\Desktop\\Models\\The Road — копия"; 
-    const path = window.sourcePath; // путь к папке с изображениями файла: images.js
-
     const gallery = document.getElementById("gallery");
 
-    //const files = await fetchFileList(path); // получаем неотсортированный список файлов с сервера
-    const files = window.images.map(img => img.Name); // используем уже отсортированный список из images.js
+
+    const items = window.images; // [{Name, Path}, ...]
+    const files = items.map(x => x.Name);
+    const urls  = items.map(x => x.Path);
 
     if (signal.aborted) return;
 
@@ -210,38 +214,37 @@ async function load() {
     let processed = 0;
 
     async function worker() {
-        while (true) {
-            if (signal.aborted) return;
+    while (true) {
+        if (signal.aborted) return;
 
-            const index = queueIndex++;
-            if (index >= files.length) return;
+        const i = queueIndex++;
+        if (i >= files.length) return;
 
-            const name = files[index];
+        const url = urls[i];
 
-            const blob = await fetchImageBlob(path, name);
-            if (signal.aborted) return;
-
-            const original = await getImageSize(blob);
-            if (signal.aborted) return;
-
-            const bmp = await createPreviewBitmap(blob, 150, original);
-            if (signal.aborted) {
-                bmp.close();
-                return;
-            }
-
-            drawCentered(canvases[index], bmp);
-            bmp.close();
-
-            //await new Promise(r => requestAnimationFrame(r));
-
-            // внутри worker после отрисовки Порциями (это часто даёт стабильность):
-            processed++;
-            if (processed % 4 === 0) {
-                await new Promise(r => requestAnimationFrame(r));
-            }
+        let blob;
+        try {
+            blob = await fetchImageBlobByUrl(url, signal);
+        } catch (e) {
+            if (!signal.aborted) console.error("Preview load failed:", url, e);
+            return;
         }
+
+        if (signal.aborted) return;
+
+        const original = await getImageSize(blob);
+        if (signal.aborted) return;
+
+        const bmp = await createPreviewBitmap(blob, 150, original);
+        if (signal.aborted) { bmp.close(); return; }
+
+        drawCentered(canvases[i], bmp);
+        bmp.close();
+
+        processed++;
+        if (processed % 4 === 0) await new Promise(r => requestAnimationFrame(r));
     }
+}
 
 
     await Promise.all(

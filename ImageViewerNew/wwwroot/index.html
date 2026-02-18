@@ -146,6 +146,39 @@
             box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.25);
         }
 
+        /* === TOAST Уведомление о новом круге просмотра === */
+        #toast {
+            position: fixed;
+            right: 14px;
+            bottom: 20px;
+            z-index: 30;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font: 16px Arial;
+            color: rgba(255, 255, 255, 0.95);
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(4px);
+            transform: translateY(10px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        #toast.left {
+            left: 14px;
+            right: auto;
+        }
+
+        #toast.right {
+            right: 14px;
+            left: auto;
+        }
+
     </style>
 </head>
 
@@ -162,6 +195,8 @@
     <button id="toggleFit">Fit</button>
 
     <div id="gallery" class="gallery hidden"></div>
+
+    <div id="toast"></div>
 
     <script src="images.js"></script>
 
@@ -405,15 +440,26 @@
         // Перелистывание картинок
         function nextImage() {
             if (isSwitching) return;
+
+            const wasLast = (index === images.length - 1);
             index = (index + 1) % images.length;
+
+            if (wasLast) showToast('Первое изображение', 1000, 'right');
+
             show();
         }
 
         function prevImage() {
             if (isSwitching) return;
+
+            const wasFirst = (index === 0);
             index = (index - 1 + images.length) % images.length;
+
+            if (wasFirst) showToast('Последнее изображение', 1000, 'left');
+
             show();
         }
+
 
         // Навигация кликами
         document.getElementById('next').onclick = nextImage;
@@ -544,6 +590,35 @@
 
         // Запускаем инициализацию
         init();
+
+        /* === TOAST Уведомление о новом круге просмотра === */
+        const toast = document.getElementById('toast');
+        let toastTimer = null;
+
+        function hideToast() {
+            if (!toast) return;
+            toast.classList.remove('show');
+        }
+
+        function showToast(message, duration = 2000, side = 'right') {
+            if (!toast) return;
+
+            // позиция
+            toast.classList.remove('left', 'right');
+            toast.classList.add(side);
+
+            // текст
+            toast.textContent = message;
+
+            // показать
+            toast.classList.add('show');
+
+            // перезапуск таймера
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(hideToast, duration);
+        }
+
+
     </script>
 
 </body>
